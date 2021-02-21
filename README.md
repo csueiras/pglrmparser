@@ -47,4 +47,3 @@ Data: 20
 Column #2
 Data: Hello World!
 ```
-**More documentation to come soon**
