@@ -1,0 +1,10 @@
+project_name: pglrmparser
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - skip: true
+
+changelog:
+  sort: asc
