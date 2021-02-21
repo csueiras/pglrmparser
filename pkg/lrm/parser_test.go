@@ -76,7 +76,18 @@ func TestParse(t *testing.T) {
 				RelationID: 16389,
 				IsKey:      true,
 				IsOld:      false,
-				TupleData:  nil,
+				TupleData: []*lrm.Tuple{
+					{
+						ValueType: lrm.TextFormattedTupleValueType,
+						Value: &lrm.TextFormattedTupleDataValue{
+							Data: "2",
+						},
+					},
+					{
+						ValueType: lrm.NullTupleValueType,
+						Value:     &lrm.NullTupleDataValue{},
+					},
+				},
 			},
 		},
 		{
@@ -86,7 +97,47 @@ func TestParse(t *testing.T) {
 				RelationID: 16389,
 				IsKey:      false,
 				IsOld:      false,
-				TupleData:  nil,
+				IsNew:      true,
+				NewTupleData: []*lrm.Tuple{
+					{
+						ValueType: lrm.TextFormattedTupleValueType,
+						Value:     &lrm.TextFormattedTupleDataValue{Data: "5"},
+					},
+					{
+						ValueType: lrm.TextFormattedTupleValueType,
+						Value:     &lrm.TextFormattedTupleDataValue{Data: "¡Hola Mundo!"},
+					},
+				},
+			},
+		},
+		{
+			name: "Update: With REPLICA IDENTITY FULL",
+			msg:  decode("55000040054f000274000000023233740000000774657374696e674e0002740000000232337400000004486f6c61"),
+			want: &lrm.Update{
+				RelationID: 16389,
+				IsKey:      false,
+				IsOld:      true,
+				TupleData: []*lrm.Tuple{
+					{
+						ValueType: lrm.TextFormattedTupleValueType,
+						Value:     &lrm.TextFormattedTupleDataValue{Data: "23"},
+					},
+					{
+						ValueType: lrm.TextFormattedTupleValueType,
+						Value:     &lrm.TextFormattedTupleDataValue{Data: "testing"},
+					},
+				},
+				IsNew:      true,
+				NewTupleData: []*lrm.Tuple{
+					{
+						ValueType: lrm.TextFormattedTupleValueType,
+						Value:     &lrm.TextFormattedTupleDataValue{Data: "23"},
+					},
+					{
+						ValueType: lrm.TextFormattedTupleValueType,
+						Value:     &lrm.TextFormattedTupleDataValue{Data: "Hola"},
+					},
+				},
 			},
 		},
 		{
@@ -136,6 +187,10 @@ func BenchmarkParse(b *testing.B) {
 		{
 			Name:    "Update",
 			Message: decode("55000040054e0002740000000135740000000dc2a1486f6c61204d756e646f21"),
+		},
+		{
+			Name: "Update: REPLICA IDENTITY FULL;",
+			Message: decode("55000040054f000274000000023233740000000774657374696e674e0002740000000232337400000004486f6c61"),
 		},
 		{
 			Name:    "Delete",

@@ -11,6 +11,9 @@ import (
 // ErrUnknownType is an error for whenever an unhandled message type is received by the parser
 var ErrUnknownType = fmt.Errorf("unknown message type")
 
+// ErrUnreadBytes is an error for whenever the parser left unread bytes in the message, this indicates the parser is either incomplete or incorrect
+var ErrUnreadBytes = fmt.Errorf("unread bytes in message")
+
 var order = binary.BigEndian
 var postgresEpoch = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
@@ -193,7 +196,16 @@ func Parse(msg []byte) (LRM, error) {
 		msg: bytes.NewBuffer(msg),
 		len: len(msg),
 	}
-	return p.readMessage()
+	message, err := p.readMessage()
+	if err != nil {
+		return nil, err
+	}
+
+	numUnread := len(p.msg.Bytes())
+	if numUnread > 0 {
+		return nil, fmt.Errorf("%w: unread bytes %d", ErrUnreadBytes, numUnread)
+	}
+	return message, nil
 }
 
 // readMessage parses an LRM message
@@ -277,24 +289,24 @@ func (p *parser) readDelete() (*Delete, error) {
 		return nil, err
 	}
 
-	key, err := p.readNext()
+	subMessageType, err := p.readNext()
 	if err != nil {
 		return nil, err
 	}
 
-	old, err := p.readNext()
-	if err != nil {
-		return nil, err
-	}
-
+	isKey := subMessageType == 'K'
+	isOld := subMessageType == 'O'
 	tupleData, err := p.readTupleData()
-	if err != nil && err != io.EOF {
+	if err != nil {
 		return nil, err
+	}
+	if len(tupleData) == 0 {
+		return nil, fmt.Errorf("unexpectedly encountered no tuple data")
 	}
 	return &Delete{
 		RelationID: relationID,
-		IsKey:      key == 'K',
-		IsOld:      old == 'O',
+		IsKey:      isKey,
+		IsOld:      isOld,
 		TupleData:  tupleData,
 	}, nil
 }
@@ -322,20 +334,15 @@ func (p *parser) readUpdate() (*Update, error) {
 		return nil, err
 	}
 
-	key, err := p.readNext()
-	if err != nil {
-		return nil, err
-	}
-
-	old, err := p.readNext()
+	subMessageType, err := p.readNext()
 	if err != nil {
 		return nil, err
 	}
 
 	up := &Update{
 		RelationID: relationID,
-		IsKey:      key == 'K',
-		IsOld:      old == 'O',
+		IsKey:      subMessageType == 'K',
+		IsOld:      subMessageType == 'O',
 	}
 
 	if up.IsKey || up.IsOld {
@@ -343,14 +350,16 @@ func (p *parser) readUpdate() (*Update, error) {
 		if err != nil && err != io.EOF {
 			return nil, err
 		}
+
+		n, err := p.readNext()
+		if err != nil {
+			return nil, err
+		}
+		up.IsNew = n == 'N'
+	} else {
+		up.IsNew = subMessageType == 'N'
 	}
 
-	n, err := p.readNext()
-	if err != nil {
-		return nil, err
-	}
-
-	up.IsNew = n == 'N'
 	if up.IsNew {
 		up.NewTupleData, err = p.readTupleData()
 		if err != nil && err != io.EOF {
@@ -691,7 +700,15 @@ func (p *parser) readUint8() (uint8, error) {
 }
 
 func (p *parser) readBytes(num int) ([]byte, error) {
-	return p.msg.Next(num), nil
+	buf := make([]byte, num)
+	n, err := p.msg.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	if n != num {
+		return nil, fmt.Errorf("found %d bytes instead of %d expected", n, num)
+	}
+	return buf, nil
 }
 
 func (p *parser) readString() (string, error) {
